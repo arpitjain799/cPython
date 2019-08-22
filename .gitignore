@@ -1,0 +1,4 @@
+.pypirc
+dist
+cPython.egg-info
+.idea
