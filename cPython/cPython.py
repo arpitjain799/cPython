@@ -3,7 +3,9 @@ import sys
 import copy
 import time
 import json
+import hashlib
 import re
+import os
 import datetime
 import requests
 from datetime import date
@@ -26,6 +28,49 @@ default_headers = {
     'Accept': '*/*',
     'cache-control': "no-cache"
 }
+
+
+def test():
+    print('开始进行测试')
+    print('format_json >>', format_json({"a": 1, "b": "b", "time": datetime.datetime.now(), "ObjectId": ObjectId()}))
+
+    print('get_string >>', get_string('abcde如果这句话前后没有字母则表示正常abcde', 'abcde', 'abcde'))
+
+    print('remove_dic_key >>', remove_dic_key({'a': 1, 'b': 2, 'c': '如果只看到我则表示正常'}, ['a', 'b']))
+
+    print('str_2_time, 2019年09月08日14:24:01 >>', str_2_time('2019年09月08日14:24:01'))
+    print('str_2_time, 2019年09月08日 >>', str_2_time('2019年09月08日'))
+    print('str_2_time, 5秒前 >>', str_2_time('5秒前'))
+
+    print('get_str_time >>', get_str_time())
+
+    print('unixtime_2_datetime >>', unixtime_2_datetime(time.time()))
+    print('unixtime_2_datetime, millisecond >>', unixtime_2_datetime(time.time() * 1000, True))
+
+    print('datetime_2_unixtime >>', datetime_2_unixtime(datetime.datetime.now()))
+    print('datetime_2_unixtime, millisecond >>', datetime_2_unixtime(datetime.datetime.now(), True))
+
+    print('get_html baidu.com >>',
+          '\033[32msuccess\033[30m' if get_html('https://www.baidu.com') else '\033[31mfail\033[30m')
+
+    print('get_html_for_requests baidu.com >>',
+          '\033[32msuccess\033[30m' if get_html_for_requests('https://www.baidu.com') else '\033[31mfail\033[30m')
+
+    print('post_for_request baidu.com >>',
+          '\033[32msuccess\033[30m' if post_for_request('https://www.baidu.com') else '\033[31mfail\033[30m')
+    print('post_for_request_return_html_and_cookie baidu.com >>',
+          '\033[32msuccess\033[30m' if post_for_request_return_html_and_cookie(
+              'https://www.baidu.com') else '\033[31mfail\033[30m')
+
+    print('md5_from_str >>', md5_from_str('123'))
+    print('md5_from_file >>', md5_from_file('./cPython.py'))
+
+    print('sha1_from_str >>', sha1_from_str('123'))
+    print('sha1_from_file >>', sha1_from_file('./cPython.py'))
+
+    print('版本对比测试, 1.0.1 > 1.0.1 >>', versioncodeCompare('1.0.1', '>', '1.0.1'))
+
+    print('测试完成')
 
 
 # 将str格式化为json, 并且将其格式化为能被正常接受的json类型(如ObjectId转为str, datetime转为时间戳等)
@@ -121,16 +166,17 @@ def get_today_last_datetime():
 
 
 # 截取字符串
-def get_string(data, startStr, endStr, contain=False):
+def get_string(data, start_str, end_str, contain=False):
     try:
-        startIndex = 0 if startStr == '' else data.find(startStr)
-        if data[startIndex:].find(endStr) == -1:
+        start_index = 0 if start_str == '' else data.find(start_str)
+        start_len = len(start_str)
+        if data[start_index:].find(end_str) == -1:
             return ''
-        endIndex = len(data) if endStr == '' else data[startIndex:].find(endStr) + startIndex + endStr.__len__()
+        end_index = len(data) if end_str == '' else data[start_index+start_len:].find(end_str) + start_index + start_len + end_str.__len__()
         if not contain:
-            startIndex += startStr.__len__()
-            endIndex -= endStr.__len__()
-        return data[startIndex:endIndex]
+            start_index += start_str.__len__()
+            end_index -= end_str.__len__()
+        return data[start_index:end_index]
     except:
         return ''
 
@@ -155,10 +201,11 @@ def str_2_time(str, format='auto'):
             '秒', '')
         if str.endswith(':'):
             str = str[0:''.__len__() - 1]
-        if re.match('\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}', str):
-            format = '%Y-%m-%d %H:%M:%S'
-        elif re.match('\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}', str):
-            format = '%Y-%m-%d %H:%M'
+            str = str.replace(' ', '')
+        if re.match('\d{4}-\d{1,2}-\d{1,2}\d{1,2}:\d{1,2}:\d{1,2}', str):
+            format = '%Y-%m-%d%H:%M:%S'
+        elif re.match('\d{4}-\d{1,2}-\d{1,2}\d{1,2}:\d{1,2}', str):
+            format = '%Y-%m-%d%H:%M'
         elif re.match('\d{4}-\d{1,2}-\d{1,2}', str):
             format = '%Y-%m-%d'
         else:
@@ -196,14 +243,19 @@ def get_str_time(time=datetime.datetime.now(), format='%Y-%m-%d'):
 
 
 # 将时间戳转换为datetime
-def unixtime_2_datetime(timestamp):
+def unixtime_2_datetime(timestamp, millisecond=False):
+    if millisecond:
+        timestamp /= 1000
     time_local = time.localtime(timestamp)
     return time.strftime("%Y-%m-%d %H:%M:%S", time_local)
 
 
 # 将datetime转换为时间戳
-def datetime_2_unixtime(_datetime):
-    return time.mktime(_datetime.timetuple())
+def datetime_2_unixtime(_datetime, millisecond=False):
+    if not millisecond:
+        return int(time.mktime(_datetime.timetuple()))
+    else:
+        return int(time.mktime(_datetime.timetuple()) * 1000.0 + _datetime.microsecond / 1000.0)
 
 
 def get_html(url, headers=None, encode=None, maxError=3, timeout=10, proxies=None):
@@ -232,29 +284,32 @@ def get_html(url, headers=None, encode=None, maxError=3, timeout=10, proxies=Non
 
 
 # 获取网页源代码
-def getHtmlForRequests(url, maxError=5, timeout=10, headers=None, encode=None, proxies=None):
+def get_html_for_requests(url, maxError=5, timeout=10, headers=None, encode=None, proxies=None):
     error = 0
     while error <= maxError:
-        if not headers:
-            headers = default_headers
-            headers.__setitem__('Referer', url)
+        try:
+            if not headers:
+                headers = default_headers
+                headers.__setitem__('Referer', url)
 
-        response = requests.request("GET", url, headers=headers, timeout=timeout, proxies=proxies)
-        html = response.text
-        if not html.strip():
-            time.sleep(1)
+            response = requests.request("GET", url, headers=headers, timeout=timeout, proxies=proxies)
+            html = response.text
+            if not html.strip():
+                time.sleep(1)
+                error += 1
+                continue
+            if encode:
+                return html.decode(encode)
+            else:
+                try:
+                    return html.decode()
+                except:
+                    return html
+        except:
             error += 1
-            continue
-        if encode:
-            return html.decode(encode)
-        else:
-            try:
-                return html.decode()
-            except:
-                return html
 
 
-def postForRequest(url='', params='', _data='', headers=None, encode=None, timeout=10, proxies=None):
+def post_for_request(url='', params='', _data='', headers=None, encode=None, timeout=10, proxies=None):
     if not headers:
         headers = default_headers
         headers.__setitem__('Referer', url)
@@ -270,7 +325,7 @@ def postForRequest(url='', params='', _data='', headers=None, encode=None, timeo
             return html
 
 
-def postForRequestReturnHtmlAndCookie(url='', params='', _data='', headers=None, encode=None, timeout=10, proxies=None):
+def post_for_request_return_html_and_cookie(url='', params='', _data='', headers=None, encode=None, timeout=10, proxies=None):
     if not headers:
         headers = default_headers
         headers.__setitem__('Referer', url)
@@ -283,8 +338,94 @@ def postForRequestReturnHtmlAndCookie(url='', params='', _data='', headers=None,
         return html, ';'.join([(f[0] + '=' + f[1]) for f in response.cookies.items()])
 
 
+def md5_from_str(str):
+    if PY3:
+        return hashlib.md5(str.encode("utf-8")).hexdigest()
+    else:
+        return hashlib.md5(str).hexdigest()
+
+
+def md5_from_file(file_path):
+    if not os.path.isfile(file_path):
+        return
+    myhash = hashlib.md5()
+    f = open(file_path,'rb')
+    while True:
+        b = f.read(8096)
+        if not b:
+            break
+        myhash.update(b)
+    f.close()
+    return myhash.hexdigest()
+
+
+def sha1_from_str(str):
+    if PY3:
+        return hashlib.sha1(str.encode("utf-8")).hexdigest()
+    else:
+        return hashlib.sha1(str).hexdigest()
+
+
+def sha1_from_file(file_path):
+    if not os.path.isfile(file_path):
+        return
+    myhash = hashlib.sha1()
+    f = open(file_path,'rb')
+    while True:
+        b = f.read(8096)
+        if not b:
+            break
+        myhash.update(b)
+    f.close()
+    return myhash.hexdigest()
+
+
+def versioncodeCompare(version1, way, version2):
+    list_version1 = [int(f) for f in version1.split('.') if f]
+    list_version2 = [int(f) for f in version2.split('.') if f]
+    if len(list_version1) != len(list_version2):
+        if len(list_version1) < len(list_version2):
+            [list_version1.append(0) for f in range(0, len(list_version2) - len(list_version1))]
+        else:
+            [list_version2.append(0) for f in range(0, len(list_version1) - len(list_version2))]
+    if way in ['==', '>=', '<=']:
+        flag = True
+        for i in range(0, len(list_version1)):
+            if list_version1[i] != list_version2[i]:
+                if way == '==':
+                    return False
+                else:
+                    flag = False
+                    break
+        if way == '==' or flag:
+            return True
+    if way in ['>', '>=']:
+        for i in range(0, len(list_version1)):
+            if list_version1[i] == list_version2[i]:
+                continue
+            if list_version1[i] > list_version2[i]:
+                return True
+            else:
+                return False
+        return False
+    elif way in ['<', '<=']:
+        for i in range(0, len(list_version1)):
+            if list_version1[i] == list_version2[i]:
+                continue
+            if list_version1[i] < list_version2[i]:
+                return True
+            else:
+                return False
+        return False
+    raise Exception('未知的判断类型')
+
+
 if __name__ == '__main__':
-    pass
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--test':
+            test()
+    # print(versioncodeCompare('1.0.2', '>>=', '1.0.1'))
     # print(format_json('{"asd": 123}'))
     # print(get_html('http://www.baidu.com'))
     # print(postForRequest('http://www.baidu.com'))
+    pass
